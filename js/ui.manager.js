@@ -1,25 +1,4 @@
-/**
- * =====================================================================
- *  UIManager
- * ---------------------------------------------------------------------
- *  Única capa que conoce y manipula el DOM. Orquesta `StorageService`
- *  (persistencia) y `POSCore` (cálculos de negocio) para renderizar
- *  cada solapa de la aplicación y responder a la interacción del
- *  usuario mediante `addEventListener` (no se usan atributos
- *  `onclick` en el HTML).
- *
- *  Estado en memoria (privado a este módulo):
- *   - productosDB / rubrosDisponibles  → catálogo
- *   - historialVentas                  → ventas registradas
- *   - registrosFiados                  → cuentas corrientes
- *   - registrosProveedores             → egresos a proveedores
- *   - modoPagoCombinado                → bandera de UI
- *   - graficoVentas                    → instancia de Chart.js
- *   - paginacion.*                     → página actual por listado
- *
- *  Punto de entrada público: `UIManager.init()`.
- * =====================================================================
- */
+
 const UIManager = (function () {
     "use strict";
 
@@ -54,6 +33,46 @@ const UIManager = (function () {
         COMBINADO: "Combinado",
     });
 
+    /**
+     * Variantes de encabezado reconocidas (ya normalizadas mediante
+     * `Helpers.normalizarClave`) para cada campo del producto, usadas
+     * al importar un catálogo desde CSV. Permite que el archivo tenga
+     * columnas en cualquier orden, con o sin acentos/mayúsculas.
+     */
+    const MAPA_CAMPOS_PRODUCTO = Object.freeze({
+        codigo: ["codigo", "cod", "sku", "codbarra", "codigobarras", "codigodebarras", "ean", "barcode"],
+        nombre: ["nombre", "producto", "descripcion", "articulo", "item", "detalle"],
+        rubro: ["rubro", "categoria", "seccion", "familia", "departamento", "tipo"],
+        costo: ["costo", "coste", "preciocosto", "costounitario", "preciocompra"],
+        porcentaje: ["porcentaje", "ganancia", "margen", "porcentajeganancia", "%"],
+        precioVenta: ["precioventa", "precio", "pvp", "preciodeventa", "precioventaajustado", "precioventafinal"],
+        stock: ["stock", "cantidad", "existencia", "existencias", "unidades"],
+        limiteStock: ["limitestock", "minimo", "stockminimo", "minimocritico", "limite", "stockcritico"],
+    });
+
+    /** Tabla inversa: variante normalizada → nombre del campo del producto. */
+    const REVERSO_CAMPOS_PRODUCTO = (function () {
+        const reverso = {};
+        Object.keys(MAPA_CAMPOS_PRODUCTO).forEach((campo) => {
+            MAPA_CAMPOS_PRODUCTO[campo].forEach((variante) => {
+                reverso[variante] = campo;
+            });
+        });
+        return reverso;
+    })();
+
+    /** Orden posicional de respaldo, idéntico al de `exportarCatalogoCSV`. */
+    const MAPEO_POSICIONAL_PRODUCTO = Object.freeze({
+        0: "codigo",
+        1: "nombre",
+        2: "rubro",
+        3: "costo",
+        4: "porcentaje",
+        5: "precioVenta",
+        6: "stock",
+        7: "limiteStock",
+    });
+
     // ------------------------------------------------------------
     // Estado privado en memoria
     // ------------------------------------------------------------
@@ -65,6 +84,8 @@ const UIManager = (function () {
     let modoPagoCombinado = false;
     let graficoVentas = null;
     let confirmCallback = null;
+    /** Resultado de un CSV procesado, pendiente de confirmación del usuario. */
+    let importacionPendiente = null;
 
     /** Estado de paginación de cada listado (página actual, 1-indexada). */
     const paginacion = {
@@ -232,12 +253,13 @@ const UIManager = (function () {
 
         // Cierre al hacer clic fuera del contenido (no aplica al ticket
         // fiscal, que mantiene bloqueo estricto de pantalla).
-        ["modalNuevoRubro", "modalConfirmacion"].forEach((id) => {
+        ["modalNuevoRubro", "modalConfirmacion", "modalImportarCatalogo"].forEach((id) => {
             const overlay = $(id);
             if (!overlay) return;
             overlay.addEventListener("click", (evento) => {
                 if (evento.target === overlay) {
                     if (id === "modalConfirmacion") confirmCallback = null;
+                    if (id === "modalImportarCatalogo") importacionPendiente = null;
                     cerrarModal(id);
                 }
             });
@@ -836,6 +858,27 @@ const UIManager = (function () {
         on("btnCerrarModalRubro", "click", () => cerrarModal("modalNuevoRubro"));
 
         on("btnExportarCSV", "click", exportarCatalogoCSV);
+        
+
+        on("btnImportarCSV", "click", () => {
+            const input = $("inputImportarCSV");
+            if (input) input.click();
+        });
+        on("inputImportarCSV", "change", manejarArchivoImportado);
+
+        on("btnImportarCombinar", "click", () => aplicarImportacion("combinar"));
+        on("btnImportarReemplazar", "click", () => {
+            cerrarModal("modalImportarCatalogo");
+            confirmar(
+                "Esta acción eliminará TODOS los productos actuales del catálogo y los reemplazará por los del archivo importado. ¿Deseas continuar?",
+                () => aplicarImportacion("reemplazar"),
+                { titulo: "Reemplazar catálogo completo", textoAceptar: "Reemplazar Todo" }
+            );
+        });
+        on("btnCancelarImportacion", "click", () => {
+            importacionPendiente = null;
+            cerrarModal("modalImportarCatalogo");
+        });
 
         on("listaABM", "click", (evento) => {
             const boton = evento.target.closest("button[data-accion]");
@@ -1037,22 +1080,233 @@ const UIManager = (function () {
         const filas = ['"Codigo","Nombre","Rubro","Costo","Porcentaje","PrecioVenta","Stock","LimiteStock"'];
         codigos.forEach((codigo) => {
             const p = productosDB[codigo];
-            const escaparCsv = (valor) => `"${String(valor).replace(/"/g, '""')}"`;
             filas.push(
-                [escaparCsv(codigo), escaparCsv(p.nombre), escaparCsv(p.rubro), p.costo, p.porcentaje, p.precioVenta, p.stock, p.limiteStock].join(",")
+                [Helpers.escaparCsv(codigo), Helpers.escaparCsv(p.nombre), Helpers.escaparCsv(p.rubro), p.costo, p.porcentaje, p.precioVenta, p.stock, p.limiteStock].join(",")
             );
         });
 
-        const blob = new Blob([filas.join("\n")], { type: "text/csv;charset=utf-8;" });
-        const enlace = document.createElement("a");
-        enlace.href = URL.createObjectURL(blob);
-        enlace.download = `catalogo_productos_${new Date().toISOString().split("T")[0]}.csv`;
-        document.body.appendChild(enlace);
-        enlace.click();
-        document.body.removeChild(enlace);
-        URL.revokeObjectURL(enlace.href);
-
+        Helpers.descargarTexto(filas.join("\n"), `catalogo_productos_${new Date().toISOString().split("T")[0]}.csv`, "text/csv;charset=utf-8;");
         mostrarToast("📥 Catálogo exportado a CSV", "success");
+    }
+
+
+
+    // --------------------------------------------------------------
+    // Importación de catálogo desde CSV
+    // --------------------------------------------------------------
+
+    /**
+     * Maneja la selección de un archivo en `#inputImportarCSV`: lee su
+     * contenido como texto y lo envía a `prepararImportacionCatalogo`.
+     * El valor del input se limpia siempre, para permitir reseleccionar
+     * el mismo archivo si el usuario cancela y vuelve a intentarlo.
+     * @param {Event} evento
+     */
+    function manejarArchivoImportado(evento) {
+        const archivo = evento.target.files && evento.target.files[0];
+        if (!archivo) return;
+
+        const lector = new FileReader();
+        lector.onload = (e) => {
+            evento.target.value = "";
+            try {
+                prepararImportacionCatalogo(String(e.target.result || ""));
+            } catch (error) {
+                console.error("Error al procesar el archivo de importación:", error);
+                mostrarToast("❌ No se pudo procesar el archivo. Verifica que sea un CSV válido.", "error");
+            }
+        };
+        lector.onerror = () => {
+            evento.target.value = "";
+            mostrarToast("❌ No se pudo leer el archivo seleccionado", "error");
+        };
+        lector.readAsText(archivo, "UTF-8");
+    }
+
+    /**
+     * Intenta reconocer la fila de encabezados de un CSV de productos.
+     * Solo se considera válida si identifica al menos las columnas
+     * "codigo" y "nombre" (sin éstas, no hay forma de construir un
+     * producto). Devuelve un mapeo {indiceColumna: nombreCampo} o
+     * `null` si no se reconoce un encabezado válido.
+     * @param {string[]} filaEncabezado
+     * @returns {object|null}
+     */
+    function mapearEncabezadosProducto(filaEncabezado) {
+        const mapeo = {};
+        filaEncabezado.forEach((celda, indice) => {
+            const clave = Helpers.normalizarClave(celda);
+            if (REVERSO_CAMPOS_PRODUCTO[clave]) mapeo[indice] = REVERSO_CAMPOS_PRODUCTO[clave];
+        });
+        const campos = Object.values(mapeo);
+        return campos.includes("codigo") && campos.includes("nombre") ? mapeo : null;
+    }
+
+    /**
+     * Construye un producto sanitizado a partir de una fila del CSV y
+     * el mapeo de columnas. Devuelve `null` si la fila no tiene código
+     * o nombre (campos obligatorios).
+     *
+     * Si el código ya existe en el catálogo actual, se conserva su
+     * `descripcion` (campo que el CSV no transporta) para no perder
+     * datos que no forman parte del formato de importación/exportación.
+     *
+     * @param {string[]} fila
+     * @param {object} mapeo {indiceColumna: nombreCampo}
+     * @returns {{codigo: string, producto: object}|null}
+     */
+    function construirProductoDesdeFila(fila, mapeo) {
+        const datos = {};
+        Object.keys(mapeo).forEach((indice) => {
+            datos[mapeo[indice]] = fila[Number(indice)];
+        });
+
+        const codigo = datos.codigo !== undefined ? String(datos.codigo).trim() : "";
+        const nombre = datos.nombre !== undefined ? String(datos.nombre).trim() : "";
+        if (!codigo || !nombre) return null;
+
+        const producto = StorageService.sanitizarProducto({
+            nombre,
+            rubro: datos.rubro ? String(datos.rubro).trim().toUpperCase() : "ALMACÉN",
+            costo: Helpers.normalizarNumeroLocal(datos.costo),
+            porcentaje: Helpers.normalizarNumeroLocal(datos.porcentaje),
+            precioVenta: Helpers.normalizarNumeroLocal(datos.precioVenta),
+            stock: Helpers.normalizarNumeroLocal(datos.stock),
+            limiteStock: Helpers.normalizarNumeroLocal(datos.limiteStock),
+        });
+
+        const existente = productosDB[codigo];
+        if (existente && existente.descripcion) producto.descripcion = existente.descripcion;
+
+        return { codigo, producto };
+    }
+
+    /**
+     * Procesa el texto plano de un CSV de catálogo: detecta el
+     * delimitador, reconoce (o infiere) las columnas, construye los
+     * productos válidos y muestra el modal de confirmación con un
+     * resumen de los cambios antes de aplicarlos.
+     * @param {string} textoPlano
+     */
+    function prepararImportacionCatalogo(textoPlano) {
+        const primeraLinea = (textoPlano.split(/\r?\n/).find((linea) => linea.trim() !== "") || "");
+        const delimitador = Helpers.detectarDelimitadorCsv(primeraLinea);
+        const filas = Helpers.parsearCsv(textoPlano, delimitador);
+
+        if (filas.length === 0) {
+            mostrarToast("❌ El archivo está vacío", "error");
+            return;
+        }
+
+        let mapeo = mapearEncabezadosProducto(filas[0]);
+        let filasDatos;
+
+        if (mapeo) {
+            // Encabezado reconocido: se descarta la primera fila.
+            filasDatos = filas.slice(1);
+        } else {
+            // Sin encabezado reconocible: se usa el orden del archivo
+            // exportado. Si la primera fila "parece" un encabezado
+            // (la columna de costo no es numérica pero sí lo es en la
+            // siguiente fila), también se descarta.
+            mapeo = MAPEO_POSICIONAL_PRODUCTO;
+            const indiceCosto = Number(Object.keys(mapeo).find((indice) => mapeo[indice] === "costo"));
+            const valorCosto = filas[0][indiceCosto];
+            const primeraFilaPareceEncabezado =
+                filas.length > 1 &&
+                valorCosto !== undefined &&
+                !Number.isFinite(parseFloat(Helpers.normalizarNumeroLocal(valorCosto)));
+            filasDatos = primeraFilaPareceEncabezado ? filas.slice(1) : filas;
+        }
+
+        const productosImportados = {};
+        filasDatos.forEach((fila) => {
+            const resultado = construirProductoDesdeFila(fila, mapeo);
+            if (resultado) productosImportados[resultado.codigo] = resultado.producto;
+        });
+
+        const codigos = Object.keys(productosImportados);
+        if (codigos.length === 0) {
+            mostrarToast("❌ No se encontraron productos válidos (se requiere al menos Código y Nombre por fila)", "error");
+            return;
+        }
+
+        let nuevos = 0;
+        let actualizados = 0;
+        codigos.forEach((codigo) => {
+            if (productosDB[codigo]) actualizados += 1;
+            else nuevos += 1;
+        });
+
+        const rubrosNuevos = Array.from(new Set(codigos.map((codigo) => productosImportados[codigo].rubro))).filter(
+            (rubro) => !rubrosDisponibles.includes(rubro)
+        );
+
+        importacionPendiente = { productos: productosImportados, rubrosNuevos };
+        mostrarResumenImportacion({ total: codigos.length, nuevos, actualizados, rubrosNuevos });
+        abrirModal("modalImportarCatalogo");
+    }
+
+    /**
+     * Renderiza el resumen de la importación pendiente dentro del
+     * modal de confirmación.
+     * @param {{total:number, nuevos:number, actualizados:number, rubrosNuevos:string[]}} resumen
+     */
+    function mostrarResumenImportacion({ total, nuevos, actualizados, rubrosNuevos }) {
+        const contenedor = $("resumenImportacion");
+        if (!contenedor) return;
+
+        const filaRubros = rubrosNuevos.length
+            ? `<div class="import-summary__row"><span>📂 Rubros nuevos a crear</span><strong>${Helpers.escaparHtml(rubrosNuevos.join(", "))}</strong></div>`
+            : "";
+
+        contenedor.innerHTML = `
+            <div class="import-summary">
+                <div class="import-summary__row"><span>📦 Filas válidas detectadas</span><strong>${total}</strong></div>
+                <div class="import-summary__row"><span>🆕 Productos nuevos</span><strong>${nuevos}</strong></div>
+                <div class="import-summary__row"><span>♻️ Productos a actualizar</span><strong>${actualizados}</strong></div>
+                ${filaRubros}
+            </div>
+            <p class="u-text-sm u-text-muted u-mt-3">Elige cómo aplicar estos cambios:</p>
+        `;
+    }
+
+    /**
+     * Aplica la importación pendiente al catálogo.
+     * @param {"combinar"|"reemplazar"} modo
+     *   - "combinar": agrega los productos nuevos y actualiza los
+     *     existentes (por código), conservando el resto del catálogo.
+     *   - "reemplazar": descarta el catálogo actual por completo y lo
+     *     sustituye por los productos importados.
+     */
+    function aplicarImportacion(modo) {
+        if (!importacionPendiente) return;
+        const { productos, rubrosNuevos } = importacionPendiente;
+        const codigos = Object.keys(productos);
+
+        if (modo === "reemplazar") {
+            productosDB = { ...productos };
+        } else {
+            codigos.forEach((codigo) => {
+                productosDB[codigo] = productos[codigo];
+            });
+        }
+
+        if (rubrosNuevos.length) {
+            rubrosDisponibles = Array.from(new Set([...rubrosDisponibles, ...rubrosNuevos]));
+            StorageService.guardarRubros(rubrosDisponibles);
+            actualizarSelectRubros();
+        }
+
+        StorageService.guardarProductos(productosDB);
+        renderListaProductos();
+        cerrarModal("modalImportarCatalogo");
+
+        const detalleRubros = rubrosNuevos.length ? ` y ${rubrosNuevos.length} rubro(s) nuevo(s)` : "";
+        const verbo = modo === "reemplazar" ? "Catálogo reemplazado" : "Importación completada";
+        mostrarToast(`✅ ${verbo}: ${codigos.length} producto(s) procesado(s)${detalleRubros}`, "success");
+
+        importacionPendiente = null;
     }
 
     // ==============================================================
