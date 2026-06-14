@@ -1,21 +1,4 @@
-/**
- * =====================================================================
- *  Helpers
- * ---------------------------------------------------------------------
- *  Funciones de utilidad transversales, sin estado y sin dependencias
- *  del DOM. Se exponen mediante un único objeto global de solo lectura
- *  (`window.Helpers`) siguiendo el patrón de Módulo (IIFE) para evitar
- *  ensuciar el scope global con funciones sueltas.
- *
- *  Responsabilidades:
- *   - Generación centralizada de IDs únicos (evita formatos mixtos
- *     como "TK-", "FD-", "M-", "PROV-" construidos a mano en cada lugar).
- *   - Conversión segura de valores numéricos (evita "NaN" / "undefined").
- *   - Formateo de moneda y fechas.
- *   - Escape de HTML para evitar inyección al renderizar texto dinámico.
- *   - "debounce" para inputs de búsqueda.
- * =====================================================================
- */
+
 const Helpers = (function () {
     "use strict";
 
@@ -137,6 +120,160 @@ const Helpers = (function () {
         };
     }
 
+    /**
+     * Normaliza una clave de texto para comparaciones tolerantes a
+     * acentos, mayúsculas y espacios/símbolos. Se usa para reconocer
+     * encabezados de columnas al importar archivos (ej: "Código",
+     * "codigo", "Cod. Barras" → "codbarras").
+     * @param {*} texto
+     * @returns {string}
+     */
+    function normalizarClave(texto) {
+        return String(texto === null || texto === undefined ? "" : texto)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // quita acentos/diacríticos
+            .toLowerCase()
+            .replace(/[^a-z0-9%]/g, ""); // deja solo letras, números y "%"
+    }
+
+    /**
+     * Detecta el delimitador más probable de una línea CSV comparando
+     * la cantidad de comas vs. punto y coma (planillas de Excel en
+     * configuración regional es-AR suelen exportar con ";").
+     * @param {string} linea
+     * @returns {","|";"}
+     */
+    function detectarDelimitadorCsv(linea) {
+        const texto = String(linea || "");
+        const comas = (texto.match(/,/g) || []).length;
+        const puntoYComa = (texto.match(/;/g) || []).length;
+        return puntoYComa > comas ? ";" : ",";
+    }
+
+    /**
+     * Parser de CSV tolerante (soporta campos entre comillas dobles,
+     * comillas escapadas como "" y saltos de línea \r\n o \n). Devuelve
+     * una matriz de filas, cada una como array de strings ya recortados
+     * (`trim`). Las filas completamente vacías se descartan.
+     * @param {string} texto
+     * @param {string} [delimitador] "," o ";"
+     * @returns {string[][]}
+     */
+    function parsearCsv(texto, delimitador) {
+        const delim = delimitador || ",";
+        const filas = [];
+        let fila = [];
+        let campo = "";
+        let dentroComillas = false;
+        const contenido = String(texto || "");
+
+        for (let i = 0; i < contenido.length; i++) {
+            const c = contenido[i];
+            if (dentroComillas) {
+                if (c === '"') {
+                    if (contenido[i + 1] === '"') {
+                        campo += '"';
+                        i++;
+                    } else {
+                        dentroComillas = false;
+                    }
+                } else {
+                    campo += c;
+                }
+                continue;
+            }
+            if (c === '"') {
+                dentroComillas = true;
+            } else if (c === delim) {
+                fila.push(campo);
+                campo = "";
+            } else if (c === "\n") {
+                fila.push(campo);
+                filas.push(fila);
+                fila = [];
+                campo = "";
+            } else if (c === "\r") {
+                // se ignora; el salto real lo maneja "\n"
+            } else {
+                campo += c;
+            }
+        }
+        if (campo !== "" || fila.length > 0) {
+            fila.push(campo);
+            filas.push(fila);
+        }
+
+        return filas.map((f) => f.map((c) => c.trim())).filter((f) => f.some((c) => c !== ""));
+    }
+
+    /**
+     * Normaliza un valor numérico que puede venir en formato regional
+     * es-AR (coma decimal, punto de miles) o con símbolos de moneda,
+     * devolviéndolo como string apto para `parseFloat`/`parseInt`.
+     * Ejemplos: "1.234,56" → "1234.56" · "10,5" → "10.5" · "1.320" → "1320" · "$ 1500" → "1500"
+     *
+     * Nota: un número con un solo punto seguido de exactamente 3
+     * dígitos y sin coma (ej: "1.320") se interpreta como separador de
+     * miles es-AR (→ 1320), no como decimal en-US (→ 1.32), ya que en
+     * planillas argentinas es la forma habitual de escribir montos
+     * enteros grandes.
+     * @param {*} valor
+     * @returns {string}
+     */
+    function normalizarNumeroLocal(valor) {
+        let limpio = String(valor === null || valor === undefined ? "" : valor).trim();
+        if (limpio === "") return "0";
+
+        // Conserva solo dígitos, separadores decimales/miles y signo negativo.
+        limpio = limpio.replace(/[^\d.,-]/g, "");
+
+        if (/^-?\d{1,3}(\.\d{3})+,\d+$/.test(limpio)) {
+            // 1.234,56 → 1234.56
+            limpio = limpio.replace(/\./g, "").replace(",", ".");
+        } else if (/^-?\d{1,3}(,\d{3})+$/.test(limpio)) {
+            // 1,200 / 1,234,567 (miles con coma, sin decimales) → 1200 / 1234567
+            limpio = limpio.replace(/,/g, "");
+        } else if (/^-?\d{1,3}(\.\d{3})+$/.test(limpio)) {
+            // 1.320 / 1.234.567 (miles con punto es-AR, sin decimales) → 1320 / 1234567
+            limpio = limpio.replace(/\./g, "");
+        } else if (/^-?\d+,\d+$/.test(limpio)) {
+            // 10,5 → 10.5 (coma decimal simple, no es un grupo de miles de 3 dígitos)
+            limpio = limpio.replace(",", ".");
+        }
+
+        return limpio || "0";
+    }
+
+    /**
+     * Escapa un valor para insertarlo como campo de un archivo CSV,
+     * envolviéndolo en comillas dobles y duplicando las comillas
+     * internas.
+     * @param {*} valor
+     * @returns {string}
+     */
+    function escaparCsv(valor) {
+        const texto = valor === null || valor === undefined ? "" : String(valor);
+        return `"${texto.replace(/"/g, '""')}"`;
+    }
+
+    /**
+     * Dispara la descarga de un archivo de texto generado en el
+     * navegador (usado para exportaciones CSV y plantillas).
+     * @param {string} contenido
+     * @param {string} nombreArchivo
+     * @param {string} [tipoMime]
+     */
+    function descargarTexto(contenido, nombreArchivo, tipoMime) {
+        const blob = new Blob([contenido], { type: tipoMime || "text/plain;charset=utf-8;" });
+        const enlace = document.createElement("a");
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = nombreArchivo;
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
+        URL.revokeObjectURL(enlace.href);
+    }
+
     return Object.freeze({
         pad,
         generarId,
@@ -147,5 +284,11 @@ const Helpers = (function () {
         formatearFechaHora,
         escaparHtml,
         debounce,
+        normalizarClave,
+        detectarDelimitadorCsv,
+        parsearCsv,
+        normalizarNumeroLocal,
+        escaparCsv,
+        descargarTexto,
     });
 })();
