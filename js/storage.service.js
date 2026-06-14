@@ -1,24 +1,4 @@
-/**
- * =====================================================================
- *  StorageService
- * ---------------------------------------------------------------------
- *  Capa de persistencia de la aplicación. Es el ÚNICO módulo que debe
- *  leer o escribir directamente en `localStorage`.
- *
- *  Responsabilidades:
- *   - Centralizar las claves de almacenamiento (evita strings mágicos
- *     repetidos por todo el código).
- *   - Sanitizar y normalizar los datos leídos: cualquier registro
- *     antiguo, incompleto o corrupto se "rellena" con valores por
- *     defecto seguros, evitando errores de tipo `undefined` /
- *     `NaN.toFixed is not a function` en el resto de la aplicación.
- *   - Sembrar la base de datos inicial (solo la primera vez que se
- *     ejecuta la app) a partir de `database.js`, que se mantiene
- *     intacto como archivo de referencia.
- *
- *  Expone su API pública en `window.StorageService`.
- * =====================================================================
- */
+
 const StorageService = (function () {
     "use strict";
 
