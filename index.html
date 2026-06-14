@@ -24,7 +24,7 @@
             </button>
         </div>
     </header>
-   
+
     <!-- ===================== NAVEGACIÓN ===================== -->
     <nav class="tabs" aria-label="Secciones del sistema">
         <button class="tabs__btn tabs__btn--active" type="button" data-tab="solapa-ventas">🛒 Caja / Ventas</button>
@@ -178,7 +178,17 @@
                 <div class="l-split__main card">
                     <h3 class="card__title">Base de Datos Actual</h3>
                     <input type="text" id="buscadorABM" class="field__input u-mb-3" placeholder="🔍 Buscar producto por nombre o código...">
-                    <button type="button" class="btn btn--ghost" id="btnExportarCSV">📥 Exportar a Excel (CSV)</button>
+
+                    <div class="btn-group u-mb-2">
+                        <button type="button" class="btn btn--ghost" id="btnExportarCSV">📥 Exportar Catálogo (CSV)</button>
+                        <button type="button" class="btn btn--ghost" id="btnImportarCSV">📤 Importar Catálogo (CSV)</button>
+                    </div>
+                   
+                    <p class="u-text-sm u-text-muted u-mb-3">
+                        El CSV puede tener encabezados como Código, Nombre, Rubro, Costo, Porcentaje, Precio Venta, Stock y Stock Mínimo, en cualquier orden y sin importar acentos. Si no se reconocen los encabezados, se asume el mismo orden que el archivo exportado.
+                    </p>
+                    <input type="file" id="inputImportarCSV" accept=".csv,text/csv" class="u-hidden" aria-hidden="true">
+
                     <div id="listaABM" class="abm-list" aria-live="polite"></div>
                 </div>
             </div>
@@ -390,6 +400,19 @@
             <div class="modal__actions">
                 <button type="button" class="btn btn--primary" id="btnGuardarNuevoRubro">Guardar</button>
                 <button type="button" class="btn btn--ghost" id="btnCerrarModalRubro">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== MODAL: IMPORTAR CATÁLOGO ===================== -->
+    <div id="modalImportarCatalogo" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <h3 class="modal__title">📤 Importar Catálogo desde CSV</h3>
+            <div class="modal__message" id="resumenImportacion"></div>
+            <div class="modal__actions modal__actions--column">
+                <button type="button" class="btn btn--primary" id="btnImportarCombinar">🔄 Combinar / Actualizar Existentes</button>
+                <button type="button" class="btn btn--danger" id="btnImportarReemplazar">⚠️ Reemplazar Todo el Catálogo</button>
+                <button type="button" class="btn btn--ghost" id="btnCancelarImportacion">Cancelar</button>
             </div>
         </div>
     </div>
