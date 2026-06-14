@@ -1,23 +1,4 @@
-/**
- * =====================================================================
- *  POSCore
- * ---------------------------------------------------------------------
- *  Núcleo de lógica de negocio del Punto de Venta. No conoce el DOM:
- *  trabaja exclusivamente con datos (números, arrays, objetos) y
- *  devuelve resultados, lo que permite testearlo de forma aislada.
- *
- *  Responsabilidades:
- *   - Mantener el estado del ticket actual (carrito de venta).
- *   - Calcular totales, vueltos y precios de venta sugeridos.
- *   - Validar cobros combinados (multi-medio de pago) de forma exacta.
- *   - Calcular el efectivo estimado en caja a partir del historial.
- *   - Calcular el balance neto de cuentas corrientes (fiados).
- *   - Descontar stock del catálogo al confirmar una venta.
- *   - Construir el objeto final de "venta" listo para persistir.
- *
- *  Expone su API pública en `window.POSCore`.
- * =====================================================================
- */
+
 const POSCore = (function () {
     "use strict";
 
