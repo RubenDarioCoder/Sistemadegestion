@@ -409,6 +409,27 @@ const UIManager = (function () {
             renderTicket();
         });
 
+        // --- Nueva delegación para cambios manuales en el input de cantidad ---
+        on("cuerpoTicket", "change", (evento) => {
+            const input = evento.target.closest(".ticket-cantidad-input");
+            if (!input) return;
+
+            const indice = Helpers.aEntero(input.dataset.index, -1);
+            const nuevaCantidad = Helpers.aNumero(input.value);
+
+            if (indice !== -1 && nuevaCantidad > 0) {
+                const ticket = POSCore.obtenerTicket();
+                const item = ticket[indice];
+                if (item) {
+                    const delta = nuevaCantidad - item.cantidad;
+                    POSCore.cambiarCantidad(indice, delta);
+                }
+            } else if (indice !== -1 && nuevaCantidad <= 0) {
+                POSCore.eliminarItem(indice);
+            }
+            renderTicket();
+        });
+
         // --- Buscador de productos por nombre ---
         initBuscadorVentas();
 
@@ -628,45 +649,57 @@ const UIManager = (function () {
         renderTicket();
     }
 
-    /** Renderiza la tabla del ticket actual, el total y los paneles de pago. */
+    /** Renderiza la tabla del ticket actual y actualiza los totales de venta. */
     function renderTicket() {
         const cuerpo = $("cuerpoTicket");
         if (!cuerpo) return;
 
-        const items = POSCore.obtenerTicket();
+        const ticket = POSCore.obtenerTicket();
         cuerpo.innerHTML = "";
 
-        if (items.length === 0) {
-            cuerpo.innerHTML = `<tr><td colspan="5" class="ticket-table__empty">El ticket está vacío. Escanee un código o busque un producto por nombre.</td></tr>`;
-        } else {
-            items.forEach((item, indice) => {
-                const subtotal = item.precio * item.cantidad;
-                const fila = document.createElement("tr");
-                fila.innerHTML = `
-                    <td class="ticket-table__name">${Helpers.escaparHtml(item.nombre)}</td>
-                    <td class="ticket-table__qty">
-                        <span class="qty-stepper">
-                            <button type="button" class="qty-stepper__btn" data-accion="restar" data-index="${indice}" aria-label="Restar una unidad">−</button>
-                            <span class="qty-stepper__value">${item.cantidad}</span>
-                            <button type="button" class="qty-stepper__btn" data-accion="sumar" data-index="${indice}" aria-label="Sumar una unidad">+</button>
-                        </span>
+        if (ticket.length === 0) {
+            cuerpo.innerHTML = `
+                <tr>
+                    <td colspan="6" class="u-text-center u-text-muted" style="padding: var(--space-6);">
+                        🛒 El ticket está vacío. Escanee o busque un producto para comenzar.
                     </td>
-                    <td class="ticket-table__price">${Helpers.formatearMoneda(item.precio)}</td>
-                    <td class="ticket-table__subtotal">${Helpers.formatearMoneda(subtotal)}</td>
-                    <td class="ticket-table__remove">
-                        <button type="button" class="icon-btn" data-accion="eliminar" data-index="${indice}" aria-label="Quitar producto del ticket">❌</button>
-                    </td>
-                `;
-                cuerpo.appendChild(fila);
-            });
+                </tr>`;
+            actualizarTotalesTicket(0);
+            return;
         }
 
-        const total = POSCore.calcularTotalTicket();
-        const totalEl = $("totalVenta");
-        if (totalEl) totalEl.textContent = Helpers.formatearMoneda(total);
+        ticket.forEach((item, index) => {
+            const subtotal = Helpers.aNumero(item.precio) * Helpers.aNumero(item.cantidad);
+            const fila = document.createElement("tr");
 
-        actualizarPagoCombinado();
-        actualizarVuelto();
+            fila.innerHTML = `
+                <td><strong>${item.nombre}</strong><br><small class="u-text-muted">${item.codigo}</small></td>
+                <td>${Helpers.formatearMoneda(item.precio)}</td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: var(--space-1); justify-content: center;">
+                        <button type="button" class="btn btn--ghost btn--sm" data-accion="restar" data-index="${index}" style="padding: 2px 6px;">-</button>
+                        <input type="number" 
+                            class="ticket-cantidad-input" 
+                            data-index="${index}" 
+                            value="${item.cantidad}" 
+                            min="1" 
+                            step="1" 
+                            style="width: 65px; text-align: center; padding: 2px 4px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-weight: bold;">
+                        <button type="button" class="btn btn--ghost btn--sm" data-accion="sumar" data-index="${index}" style="padding: 2px 6px;">+</button>
+                    </div>
+                </td>
+                <td class="u-text-right"><strong>${Helpers.formatearMoneda(subtotal)}</strong></td>
+                <td class="u-text-center">
+                    <button type="button" class="btn btn--ghost btn--danger btn--sm" data-accion="eliminar" data-index="${index}" title="Quitar ítem" style="padding: var(--space-1) var(--space-2);">
+                        🗑️
+                    </button>
+                </td>
+            `;
+            cuerpo.appendChild(fila);
+        });
+
+        const total = POSCore.calcularTotalTicket();
+        actualizarTotalesTicket(total);
     }
 
     /**

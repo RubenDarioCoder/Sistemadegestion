@@ -34,49 +34,50 @@ const Helpers = (function () {
     }
 
     /**
-     * Convierte cualquier valor a número finito, devolviendo un valor
-     * por defecto seguro si la conversión falla (reemplaza el patrón
-     * repetido `parseFloat(x) || 0`, que falla con valores negativos
-     * legítimos igual a 0 pero es aceptable para montos).
+     * Convierte un valor a tipo numérico entero (descarta centavos).
      * @param {*} valor
-     * @param {number} porDefecto
+     * @param {number} [valorPorDefecto=0]
      * @returns {number}
      */
-    function aNumero(valor, porDefecto = 0) {
-        const n = typeof valor === "number" ? valor : parseFloat(valor);
-        return Number.isFinite(n) ? n : porDefecto;
+    function aNumero(valor, valorPorDefecto = 0) {
+        if (valor === null || valor === undefined) return valorPorDefecto;
+        if (typeof valor === "number") return Math.round(valor);
+        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, ""));
+        return isNaN(n) ? valorPorDefecto : Math.round(n);
     }
 
     /**
-     * Convierte cualquier valor a entero seguro.
-     * @param {*} valor
-     * @param {number} porDefecto
-     * @returns {number}
+     * Convierte un valor a entero (ya no se necesitan decimales).
+     * Mantenemos la función por compatibilidad con el resto del código.
      */
-    function aEntero(valor, porDefecto = 0) {
-        const n = typeof valor === "number" ? Math.trunc(valor) : parseInt(valor, 10);
-        return Number.isFinite(n) ? n : porDefecto;
+    function aEntero(valor, valorPorDefecto = 0) {
+        return aNumero(valor, valorPorDefecto);
     }
 
     /**
-     * Redondea un número a 2 decimales evitando errores de coma
-     * flotante (ej: 0.1 + 0.2 = 0.30000000000000004).
+     * Redondea un número (ahora a 0 decimales en vez de 2).
      * @param {number} valor
      * @returns {number}
      */
     function redondear2(valor) {
-        return Math.round((aNumero(valor) + Number.EPSILON) * 100) / 100;
+        return Math.round(Helpers.aNumero(valor));
     }
 
     /**
-     * Formatea un número como moneda ($ con 2 decimales).
-     * @param {number} valor
+     * Formatea un número como moneda sin decimales (centavos).
+     * @param {number|string} valor
      * @returns {string}
      */
     function formatearMoneda(valor) {
-        return `$${aNumero(valor).toFixed(2)}`;
+        const n = aNumero(valor);
+        // Usamos style: "currency" pero forzando minimumFractionDigits a 0
+        return n.toLocaleString("es-AR", {
+            style: "currency",
+            currency: "ARS",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
     }
-
     /**
      * Formatea una fecha (Date) a fecha y hora legible en es-AR.
      * @param {Date} fecha
