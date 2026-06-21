@@ -703,6 +703,24 @@ const UIManager = (function () {
     }
 
     /**
+     * Actualiza el total mostrado en el "Resumen de Venta" y refresca
+     * los paneles que dependen de él (cobro combinado y vuelto).
+     *
+     * Esta función se perdió durante el refactor del input de cantidad
+     * tipeable, lo que provocaba un `ReferenceError` en cada render del
+     * ticket (impidiendo que el total se actualizara al agregar
+     * productos).
+     * @param {number} total
+     */
+    function actualizarTotalesTicket(total) {
+        const totalEl = $("totalVenta");
+        if (totalEl) totalEl.textContent = Helpers.formatearMoneda(total);
+
+        actualizarPagoCombinado();
+        actualizarVuelto();
+    }
+
+    /**
      * Valida, registra y persiste la venta actual: descuenta stock,
      * agrega el ticket al historial, registra el fiado (si corresponde),
      * muestra el comprobante y reinicia el formulario de cobro.
@@ -891,7 +909,7 @@ const UIManager = (function () {
         on("btnCerrarModalRubro", "click", () => cerrarModal("modalNuevoRubro"));
 
         on("btnExportarCSV", "click", exportarCatalogoCSV);
-        
+
 
         on("btnImportarCSV", "click", () => {
             const input = $("inputImportarCSV");
