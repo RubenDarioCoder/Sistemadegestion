@@ -33,7 +33,7 @@ const Helpers = (function () {
         return `${prefijo}-${marcaTiempo}-${sufijo}`;
     }
 
-    /**
+        /**
      * Convierte un valor a tipo numérico entero (descarta centavos).
      * @param {*} valor
      * @param {number} [valorPorDefecto=0]
@@ -41,12 +41,45 @@ const Helpers = (function () {
      */
     function aNumero(valor, valorPorDefecto = 0) {
         if (valor === null || valor === undefined) return valorPorDefecto;
-        if (typeof valor === "number") return Math.round(valor);
-        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, ""));
+        if (typeof valor === \"number\") return Math.round(valor);
+        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, \"\"));
         return isNaN(n) ? valorPorDefecto : Math.round(n);
     }
 
     /**
+     * Convierte un valor a entero.
+     */
+    function aEntero(valor, valorPorDefecto = 0) {
+        if (valor === null || valor === undefined) return valorPorDefecto;
+        const n = parseInt(String(valor).replace(/[^0-9.-]/g, \"\"), 10);
+        return isNaN(n) ? valorPorDefecto : n;
+    }
+
+    /**
+     * Redondea un número a 0 decimales.
+     * @param {number} valor
+     * @returns {number}
+     */
+    function redondear2(valor) {
+        if (valor === null || valor === undefined) return 0;
+        return Math.round(Number(valor) || 0);
+    }
+
+    /**
+     * Formatea un número como moneda sin decimales (centavos).
+     * @param {number|string} valor
+     * @returns {string}
+     */
+    function formatearMoneda(valor) {
+        const n = aNumero(valor);
+        return n.toLocaleString(\"es-AR\", {
+            style: \"currency\",
+            currency: \"ARS\",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    }
+
      * Convierte un valor a entero (ya no se necesitan decimales).
      * Mantenemos la función por compatibilidad con el resto del código.
      */
