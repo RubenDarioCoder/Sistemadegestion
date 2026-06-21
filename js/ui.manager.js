@@ -1142,17 +1142,7 @@ const UIManager = (function () {
 
 
 
-    // --------------------------------------------------------------
-    // Importación de catálogo desde CSV
-    // --------------------------------------------------------------
-
-    /**
-     * Maneja la selección de un archivo en `#inputImportarCSV`: lee su
-     * contenido como texto y lo envía a `prepararImportacionCatalogo`.
-     * El valor del input se limpia siempre, para permitir reseleccionar
-     * el mismo archivo si el usuario cancela y vuelve a intentarlo.
-     * @param {Event} evento
-     */
+  
     function manejarArchivoImportado(evento) {
         const archivo = evento.target.files && evento.target.files[0];
         if (!archivo) return;
