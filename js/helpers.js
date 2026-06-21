@@ -1,4 +1,3 @@
-
 const Helpers = (function () {
     "use strict";
 
@@ -33,7 +32,7 @@ const Helpers = (function () {
         return `${prefijo}-${marcaTiempo}-${sufijo}`;
     }
 
-        /**
+    /**
      * Convierte un valor a tipo numérico entero (descarta centavos).
      * @param {*} valor
      * @param {number} [valorPorDefecto=0]
@@ -41,8 +40,8 @@ const Helpers = (function () {
      */
     function aNumero(valor, valorPorDefecto = 0) {
         if (valor === null || valor === undefined) return valorPorDefecto;
-        if (typeof valor === \"number\") return Math.round(valor);
-        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, \"\"));
+        if (typeof valor === "number") return Math.round(valor);
+        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, ""));
         return isNaN(n) ? valorPorDefecto : Math.round(n);
     }
 
@@ -50,9 +49,7 @@ const Helpers = (function () {
      * Convierte un valor a entero.
      */
     function aEntero(valor, valorPorDefecto = 0) {
-        if (valor === null || valor === undefined) return valorPorDefecto;
-        const n = parseInt(String(valor).replace(/[^0-9.-]/g, \"\"), 10);
-        return isNaN(n) ? valorPorDefecto : n;
+        return aNumero(valor, valorPorDefecto);
     }
 
     /**
@@ -72,38 +69,6 @@ const Helpers = (function () {
      */
     function formatearMoneda(valor) {
         const n = aNumero(valor);
-        return n.toLocaleString(\"es-AR\", {
-            style: \"currency\",
-            currency: \"ARS\",
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        });
-    }
-
-     * Convierte un valor a entero (ya no se necesitan decimales).
-     * Mantenemos la función por compatibilidad con el resto del código.
-     */
-    function aEntero(valor, valorPorDefecto = 0) {
-        return aNumero(valor, valorPorDefecto);
-    }
-
-    /**
-     * Redondea un número (ahora a 0 decimales en vez de 2).
-     * @param {number} valor
-     * @returns {number}
-     */
-    function redondear2(valor) {
-        return Math.round(Helpers.aNumero(valor));
-    }
-
-    /**
-     * Formatea un número como moneda sin decimales (centavos).
-     * @param {number|string} valor
-     * @returns {string}
-     */
-    function formatearMoneda(valor) {
-        const n = aNumero(valor);
-        // Usamos style: "currency" pero forzando minimumFractionDigits a 0
         return n.toLocaleString("es-AR", {
             style: "currency",
             currency: "ARS",
@@ -111,6 +76,7 @@ const Helpers = (function () {
             maximumFractionDigits: 0
         });
     }
+
     /**
      * Formatea una fecha (Date) a fecha y hora legible en es-AR.
      * @param {Date} fecha
@@ -244,13 +210,6 @@ const Helpers = (function () {
      * Normaliza un valor numérico que puede venir en formato regional
      * es-AR (coma decimal, punto de miles) o con símbolos de moneda,
      * devolviéndolo como string apto para `parseFloat`/`parseInt`.
-     * Ejemplos: "1.234,56" → "1234.56" · "10,5" → "10.5" · "1.320" → "1320" · "$ 1500" → "1500"
-     *
-     * Nota: un número con un solo punto seguido de exactamente 3
-     * dígitos y sin coma (ej: "1.320") se interpreta como separador de
-     * miles es-AR (→ 1320), no como decimal en-US (→ 1.32), ya que en
-     * planillas argentinas es la forma habitual de escribir montos
-     * enteros grandes.
      * @param {*} valor
      * @returns {string}
      */
@@ -258,20 +217,15 @@ const Helpers = (function () {
         let limpio = String(valor === null || valor === undefined ? "" : valor).trim();
         if (limpio === "") return "0";
 
-        // Conserva solo dígitos, separadores decimales/miles y signo negativo.
         limpio = limpio.replace(/[^\d.,-]/g, "");
 
         if (/^-?\d{1,3}(\.\d{3})+,\d+$/.test(limpio)) {
-            // 1.234,56 → 1234.56
             limpio = limpio.replace(/\./g, "").replace(",", ".");
         } else if (/^-?\d{1,3}(,\d{3})+$/.test(limpio)) {
-            // 1,200 / 1,234,567 (miles con coma, sin decimales) → 1200 / 1234567
             limpio = limpio.replace(/,/g, "");
         } else if (/^-?\d{1,3}(\.\d{3})+$/.test(limpio)) {
-            // 1.320 / 1.234.567 (miles con punto es-AR, sin decimales) → 1320 / 1234567
             limpio = limpio.replace(/\./g, "");
         } else if (/^-?\d+,\d+$/.test(limpio)) {
-            // 10,5 → 10.5 (coma decimal simple, no es un grupo de miles de 3 dígitos)
             limpio = limpio.replace(",", ".");
         }
 
