@@ -1,4 +1,3 @@
-
 const POSCore = (function () {
     "use strict";
 
@@ -48,16 +47,33 @@ const POSCore = (function () {
     }
 
     /**
-     * Modifica la cantidad de un ítem del ticket. Si la cantidad
-     * resultante es 0 o menor, el ítem se elimina del ticket.
+     * Modifica la cantidad de un ítem en ±delta, usando aDecimal
+     * para no acumular errores de coma flotante.
+     * Si la cantidad resultante ≤ 0, elimina el ítem.
      * @param {number} indice
-     * @param {number} delta +1 / -1
+     * @param {number} delta  +1 o -1
      */
     function cambiarCantidad(indice, delta) {
         const item = ticketActual[indice];
         if (!item) return;
-        item.cantidad += delta;
-        if (item.cantidad <= 0) ticketActual.splice(indice, 1);
+        const nueva = Helpers.aDecimal(item.cantidad + delta, 3, 0);
+        if (nueva <= 0) ticketActual.splice(indice, 1);
+        else item.cantidad = nueva;
+    }
+
+    /**
+     * Establece la cantidad de un ítem a un valor exacto tipeado
+     * (acepta "0,557" → 0.557 vía Helpers.aDecimal).
+     * Si la cantidad resultante ≤ 0, elimina el ítem.
+     * @param {number} indice
+     * @param {string|number} nuevaCantidad
+     */
+    function establecerCantidad(indice, nuevaCantidad) {
+        const item = ticketActual[indice];
+        if (!item) return;
+        const cantidad = Helpers.aDecimal(nuevaCantidad, 3, 0);
+        if (cantidad <= 0) ticketActual.splice(indice, 1);
+        else item.cantidad = cantidad;
     }
 
     /**
@@ -74,12 +90,15 @@ const POSCore = (function () {
     }
 
     /**
-     * Calcula el total monetario del ticket actual.
+     * Calcula el total del ticket.
+     * subtotal = precio (entero) × cantidad (decimal hasta 3 cifras).
+     * El gran total se redondea al peso más cercano (sin centavos).
      * @returns {number}
      */
     function calcularTotalTicket() {
         return Helpers.redondear2(
-            ticketActual.reduce((acumulado, item) => acumulado + item.precio * item.cantidad, 0)
+            ticketActual.reduce((acc, item) =>
+                acc + item.precio * Helpers.aDecimal(item.cantidad, 3, 0), 0)
         );
     }
 
@@ -210,7 +229,9 @@ const POSCore = (function () {
         items.forEach((item) => {
             const producto = productosDB[item.codigo];
             if (producto) {
-                producto.stock = Math.max(0, Helpers.aEntero(producto.stock) - Helpers.aEntero(item.cantidad));
+                const stockActual = Helpers.aDecimal(producto.stock, 3, 0);
+                const vendido     = Helpers.aDecimal(item.cantidad, 3, 0);
+                producto.stock    = Math.max(0, Helpers.aDecimal(stockActual - vendido, 3, 0));
             }
         });
         return productosDB;
@@ -321,6 +342,7 @@ const POSCore = (function () {
         obtenerTicket,
         agregarProducto,
         cambiarCantidad,
+        establecerCantidad,
         eliminarItem,
         vaciarTicket,
         calcularTotalTicket,
