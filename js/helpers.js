@@ -33,33 +33,94 @@ const Helpers = (function () {
     }
 
     /**
-     * Convierte un valor a tipo numérico entero (descarta centavos).
+     * Convierte un valor a número decimal. NO redondea.
+     * Acepta tanto punto como coma como separador decimal.
      * @param {*} valor
      * @param {number} [valorPorDefecto=0]
      * @returns {number}
      */
     function aNumero(valor, valorPorDefecto = 0) {
         if (valor === null || valor === undefined) return valorPorDefecto;
-        if (typeof valor === "number") return Math.round(valor);
-        const n = parseFloat(String(valor).replace(/[^0-9.-]/g, ""));
-        return isNaN(n) ? valorPorDefecto : Math.round(n);
+        if (typeof valor === "number") return isNaN(valor) ? valorPorDefecto : valor;
+        let texto = String(valor).trim().replace(/[^\d.,-]/g, "");
+        if (texto.includes(",") && texto.includes(".")) {
+            texto = texto.replace(/\./g, "").replace(",", ".");
+        } else if (texto.includes(",")) {
+            texto = texto.replace(",", ".");
+        }
+        const n = parseFloat(texto);
+        return isNaN(n) ? valorPorDefecto : n;
     }
 
     /**
-     * Convierte un valor a entero.
+     * Convierte un valor a entero (Math.round sobre aNumero).
      */
     function aEntero(valor, valorPorDefecto = 0) {
-        return aNumero(valor, valorPorDefecto);
+        return Math.round(aNumero(valor, valorPorDefecto));
     }
 
     /**
-     * Redondea un número a 0 decimales.
+     * Redondea al peso entero más cercano (sin centavos).
+     * Solo se aplica al MOSTRAR totales en pantalla.
      * @param {number} valor
      * @returns {number}
      */
     function redondear2(valor) {
         if (valor === null || valor === undefined) return 0;
         return Math.round(Number(valor) || 0);
+    }
+
+    /**
+     * Convierte una cantidad tipeada a mano a decimal con hasta 3
+     * posiciones. La coma siempre es separador decimal (nunca miles),
+     * porque el cajero tipea "0,557" para decir medio kilo más.
+     *
+     * "0,557" → 0.557  |  "0.557" → 0.557  |  "0,200" → 0.2
+     * "2"     → 2      |  "1,5"   → 1.5    |  ""      → 0
+     *
+     * @param {*} valor
+     * @param {number} [decimales=3]
+     * @param {number} [porDefecto=0]
+     * @returns {number}
+     */
+    function aDecimal(valor, decimales = 3, porDefecto = 0) {
+        if (valor === null || valor === undefined || valor === "") return porDefecto;
+
+        let n;
+        if (typeof valor === "number") {
+            if (isNaN(valor)) return porDefecto;
+            n = valor;  // ya es número, sólo le aplicamos el redondeo abajo
+        } else {
+            let texto = String(valor).trim().replace(/[^\d.,-]/g, "");
+            if (!texto) return porDefecto;
+            const tieneComa  = texto.includes(",");
+            const tienePunto = texto.includes(".");
+            if (tieneComa && tienePunto) {
+                texto = texto.replace(/\./g, "").replace(",", ".");
+            } else if (tieneComa) {
+                texto = texto.replace(",", ".");
+            }
+            n = parseFloat(texto);
+            if (isNaN(n)) return porDefecto;
+        }
+
+        // Siempre redondeamos (incluso si ya era un número) para eliminar
+        // errores de coma flotante como 0.2 + 1 - 1 = 0.19999999999999996
+        const factor = Math.pow(10, decimales);
+        return Math.round(n * factor) / factor;
+    }
+
+    /**
+     * Formatea una cantidad decimal para mostrar con coma decimal
+     * y sin ceros finales (hasta 3 dígitos de precisión).
+     * 1 → "1"  |  0.55 → "0,55"  |  0.557 → "0,557"  |  2.5 → "2,5"
+     * @param {*} valor
+     * @returns {string}
+     */
+    function formatearCantidad(valor) {
+        const n = aDecimal(valor, 3, 0);
+        const texto = n.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+        return texto.replace(".", ",");
     }
 
     /**
@@ -267,8 +328,10 @@ const Helpers = (function () {
         generarId,
         aNumero,
         aEntero,
+        aDecimal,
         redondear2,
         formatearMoneda,
+        formatearCantidad,
         formatearFechaHora,
         escaparHtml,
         debounce,
