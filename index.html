@@ -22,6 +22,9 @@
                     <span class="theme-toggle__icon-moon u-hidden">🌙</span>
                 </span>
             </button>
+            <button type="button" id="btnCopiaTotal" class="btn-copia-total" title="Copiar o importar todos los datos del sistema">
+                📋 Copia Total
+            </button>
         </div>
     </header>
 
@@ -250,74 +253,85 @@
 
         <!-- ===================== SOLAPA 5: CONTROL DE FIADOS ===================== -->
         <section id="solapa-fiados" class="tab-panel" aria-label="Control de fiados">
+
+            <!-- KPI global -->
             <div class="card kpi-banner kpi-banner--warning">
                 <div>
-                    <span class="kpi-banner__label">Balance Neto en la Calle (Fiados Pendientes)</span>
+                    <span class="kpi-banner__label">Total en la Calle (Deuda Neta Pendiente)</span>
                     <h2 id="total-general-fiados" class="kpi-banner__value kpi-banner__value--danger">$0.00</h2>
                 </div>
                 <div class="kpi-banner__icon">📊</div>
             </div>
 
             <div class="l-split">
+
+                <!-- FORMULARIO LATERAL -->
                 <div class="l-split__side card">
-                    <h3 class="card__title" id="titulo-formulario-fiado">Nuevo Registro de Cuenta</h3>
+                    <h3 class="card__title" id="titulo-formulario-fiado">Nueva Operación de Cuenta</h3>
                     <form id="formularioFiado" novalidate>
                         <input type="hidden" id="edit-id-fiado">
 
                         <div class="field">
-                            <label class="field__label" for="nombreFiado">Nombre del cliente</label>
-                            <input type="text" id="nombreFiado" class="field__input" required placeholder="Ej: Juan Pérez" autocomplete="off">
-                        </div>
-
-                        <div class="field">
-                            <label class="field__label" for="montoFiado">Monto de la operación ($)</label>
-                            <input type="number" step="0.01" id="montoFiado" class="field__input" required placeholder="0.00" inputmode="decimal">
+                            <label class="field__label" for="nombreFiado">Cliente</label>
+                            <input type="text" id="nombreFiado" class="field__input" required
+                                   placeholder="Ej: Juan Pérez" autocomplete="off">
                         </div>
 
                         <div class="field">
                             <label class="field__label" for="tipoFiado">Tipo de movimiento</label>
                             <select id="tipoFiado" class="field__select">
-                                <option value="DEUDA" selected>⚠️ Se llevó mercadería (Fió)</option>
-                                <option value="PAGO">✅ Dejó dinero (Pagó Deuda)</option>
+                                <option value="DEUDA" selected>⚠️ Fió — Se llevó mercadería</option>
+                                <option value="PAGO">✅ Pagó — Dejó dinero</option>
                             </select>
                         </div>
 
-                        <button type="submit" id="btn-registrar-fiado" class="btn btn--primary">Registrar Operación</button>
-                        <button type="button" id="btn-cancelar-fiado" class="btn btn--ghost u-mt-2">Cancelar Edición</button>
+                        <div class="field">
+                            <label class="field__label" for="montoFiado">Monto ($)</label>
+                            <input type="text" id="montoFiado" class="field__input" required
+                                   placeholder="0" inputmode="decimal" autocomplete="off">
+                        </div>
+
+                        <div class="field">
+                            <label class="field__label" for="descripcionFiado">Descripción / Detalle</label>
+                            <input type="text" id="descripcionFiado" class="field__input"
+                                   placeholder="Ej: Pan, facturas, Ticket #TK-..." autocomplete="off">
+                        </div>
+
+                        <button type="submit" id="btn-registrar-fiado" class="btn btn--primary">
+                            Registrar Operación
+                        </button>
+                        <button type="button" id="btn-cancelar-fiado" class="btn btn--ghost u-mt-2">
+                            Cancelar
+                        </button>
                     </form>
+
+                    <!-- Export/Import compacto -->
+                    <div class="fiados-export">
+                        <h3 class="card__title">Exportar / Importar datos</h3>
+                        <button type="button" class="btn btn--ghost u-mb-2" id="btnExportarFiados">
+                            📋 Copiar registros al portapapeles
+                        </button>
+                        <p class="u-text-sm u-text-muted u-mb-2">
+                            Formato: <code>fecha|cliente|DEUDA o PAGO|monto|descripción</code>
+                        </p>
+                        <textarea id="texto-importar-fiado" class="field__textarea u-w-full"
+                                  placeholder="Pega aquí para importar..."></textarea>
+                        <button type="button" class="btn btn--warning u-mt-2" id="btnImportarFiados">
+                            📥 Importar
+                        </button>
+                    </div>
                 </div>
 
+                <!-- LISTA DE CLIENTES AGRUPADA -->
                 <div class="l-split__main card">
-                    <div class="filters-row">
-                        <input type="text" id="buscar-nombre-fiado" class="field__input" placeholder="🔍 Buscar cliente...">
-                        <input type="date" id="buscar-fecha-inicio-fiado" class="field__input">
-                        <input type="date" id="buscar-fecha-fin-fiado" class="field__input">
-                    </div>
+                    <input type="text" id="buscar-nombre-fiado" class="field__input u-mb-3"
+                           placeholder="🔍 Buscar cliente...">
 
-                    <div class="table-wrap">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Cliente</th>
-                                    <th class="th--center">Operación</th>
-                                    <th class="th--right">Monto</th>
-                                    <th class="th--center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabla-registros-fiados"></tbody>
-                        </table>
-                    </div>
+                    <!-- Tarjetas agrupadas por cliente -->
+                    <div id="lista-clientes-fiados" aria-live="polite"></div>
                     <div id="paginacionFiados" class="pagination"></div>
-
-                    <div class="u-mt-4 fiados-export">
-                        <h3 class="card__title">Exportación / Importación de Cuentas</h3>
-                        <button type="button" class="btn btn--ghost u-mb-2" id="btnExportarFiados">📋 Copiar Registros Filtrados al Portapapeles</button>
-                        <p class="u-text-sm u-text-muted u-mb-2">Formato por línea: <code>fecha|cliente|DEUDA o PAGO|monto</code></p>
-                        <textarea id="texto-importar-fiado" class="field__textarea u-w-full" placeholder="Ej: 12/06/2026 10:30:00|Juan Pérez|DEUDA|1500"></textarea>
-                        <button type="button" class="btn btn--warning u-mt-2" id="btnImportarFiados">📥 Procesar e Importar Datos</button>
-                    </div>
                 </div>
+
             </div>
         </section>
 
@@ -417,6 +431,32 @@
         </div>
     </div>
 
+    <!-- ===================== MODAL: COPIA TOTAL DE DATOS ===================== -->
+    <div id="modalCopiaTotal" class="modal-overlay" aria-hidden="true">
+        <div class="modal">
+            <h3 class="modal__title">📋 Copia Total de Datos</h3>
+            <p class="modal__message">
+                Copia todo el sistema (catálogo, ventas, fiados agrupados por cliente y proveedores) para pegarlo en
+                otro dispositivo, o pega aquí una Copia Total generada previamente para importarla.
+            </p>
+
+            <button type="button" class="btn btn--primary btn--block u-mb-3" id="btnGenerarCopiaTotal">
+                📤 Copiar Todos los Datos al Portapapeles
+            </button>
+
+            <div id="resumenCopiaTotal" class="import-summary u-mb-3"></div>
+
+            <textarea id="texto-copia-total" class="field__textarea u-w-full" rows="6"
+                      placeholder="Pega aquí una Copia Total generada en otro dispositivo..."></textarea>
+
+            <div class="modal__actions modal__actions--column u-mt-3">
+                <button type="button" class="btn btn--primary" id="btnCopiaTotalCombinar">🔄 Agregar a lo Existente (Combinar)</button>
+                <button type="button" class="btn btn--danger" id="btnCopiaTotalReemplazar">⚠️ Reemplazar Todos los Datos</button>
+                <button type="button" class="btn btn--ghost" id="btnCerrarCopiaTotal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===================== MODAL: CONFIRMACIÓN (reemplaza confirm()) ===================== -->
     <div id="modalConfirmacion" class="modal-overlay" aria-hidden="true" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitulo">
         <div class="modal modal--sm">
@@ -425,6 +465,48 @@
             <div class="modal__actions">
                 <button type="button" class="btn btn--ghost" id="btnConfirmCancelar">Cancelar</button>
                 <button type="button" class="btn btn--danger" id="btnConfirmAceptar">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== MODAL: CUENTA DE CLIENTE (Fiados) ===================== -->
+    <div id="modalCuentaCliente" class="modal-overlay" aria-hidden="true">
+        <div class="modal modal--cuenta">
+            <button class="modal__close" id="btnCerrarCuentaCliente" aria-label="Cerrar">✕</button>
+
+            <!-- Header: nombre + saldo -->
+            <div class="cuenta-header">
+                <div>
+                    <h3 class="cuenta-header__nombre" id="cuentaClienteNombre"></h3>
+                    <p class="cuenta-header__saldo-label">Saldo pendiente</p>
+                </div>
+                <div class="cuenta-header__saldo" id="cuentaClienteSaldo"></div>
+            </div>
+
+            <!-- Historial de movimientos de ese cliente -->
+            <div class="cuenta-movimientos" id="cuentaMovimientos"></div>
+
+            <!-- Acción: pagar parcial o total -->
+            <div class="cuenta-pago">
+                <h4 class="cuenta-pago__titulo">Registrar Pago</h4>
+                <div class="cuenta-pago__row">
+                    <div class="field l-flex-1">
+                        <label class="field__label" for="cuentaPagoMonto">Monto que paga ($)</label>
+                        <input type="text" id="cuentaPagoMonto" class="field__input"
+                               placeholder="0" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <button type="button" id="btnCuentaPagarTodo" class="btn btn--ghost btn--auto">
+                        Pagar todo
+                    </button>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="cuentaPagoDescripcion">Descripción (opcional)</label>
+                    <input type="text" id="cuentaPagoDescripcion" class="field__input"
+                           placeholder="Ej: Abono semanal..." autocomplete="off">
+                </div>
+                <button type="button" id="btnConfirmarPagoCuenta" class="btn btn--success">
+                    ✅ Confirmar Pago
+                </button>
             </div>
         </div>
     </div>
