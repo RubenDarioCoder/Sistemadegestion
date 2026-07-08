@@ -1,4 +1,3 @@
-
 const UIManager = (function () {
     "use strict";
 
@@ -212,7 +211,7 @@ const UIManager = (function () {
      * defensiva ante recargas o estados inconsistentes).
      */
     function cerrarTodosLosModales() {
-        ["modalTicketImpreso", "modalNuevoRubro", "modalConfirmacion"].forEach(cerrarModal);
+        ["modalTicketImpreso", "modalNuevoRubro", "modalConfirmacion", "modalImportarCatalogo", "modalCopiaTotal"].forEach(cerrarModal);
     }
 
     /**
@@ -253,7 +252,7 @@ const UIManager = (function () {
 
         // Cierre al hacer clic fuera del contenido (no aplica al ticket
         // fiscal, que mantiene bloqueo estricto de pantalla).
-        ["modalNuevoRubro", "modalConfirmacion", "modalImportarCatalogo"].forEach((id) => {
+        ["modalNuevoRubro", "modalConfirmacion", "modalImportarCatalogo", "modalCopiaTotal"].forEach((id) => {
             const overlay = $(id);
             if (!overlay) return;
             overlay.addEventListener("click", (evento) => {
@@ -409,25 +408,24 @@ const UIManager = (function () {
             renderTicket();
         });
 
-        // --- Nueva delegación para cambios manuales en el input de cantidad ---
+        // --- Cambio manual de cantidad tipeada (acepta coma/punto decimal) ---
         on("cuerpoTicket", "change", (evento) => {
             const input = evento.target.closest(".ticket-cantidad-input");
             if (!input) return;
-
             const indice = Helpers.aEntero(input.dataset.index, -1);
-            const nuevaCantidad = Helpers.aNumero(input.value);
-
-            if (indice !== -1 && nuevaCantidad > 0) {
-                const ticket = POSCore.obtenerTicket();
-                const item = ticket[indice];
-                if (item) {
-                    const delta = nuevaCantidad - item.cantidad;
-                    POSCore.cambiarCantidad(indice, delta);
-                }
-            } else if (indice !== -1 && nuevaCantidad <= 0) {
-                POSCore.eliminarItem(indice);
-            }
+            if (indice === -1) return;
+            // aDecimal interpreta "0,557" → 0.557  y  "0.557" → 0.557
+            POSCore.establecerCantidad(indice, input.value);
             renderTicket();
+        });
+
+        // Enter en el input de cantidad = confirmar (dispara blur → change)
+        on("cuerpoTicket", "keydown", (evento) => {
+            if (evento.key !== "Enter") return;
+            const input = evento.target.closest(".ticket-cantidad-input");
+            if (!input) return;
+            evento.preventDefault();
+            input.blur();
         });
 
         // --- Buscador de productos por nombre ---
@@ -660,7 +658,7 @@ const UIManager = (function () {
         if (ticket.length === 0) {
             cuerpo.innerHTML = `
                 <tr>
-                    <td colspan="6" class="u-text-center u-text-muted" style="padding: var(--space-6);">
+                    <td colspan="5" class="ticket-table__empty">
                         🛒 El ticket está vacío. Escanee o busque un producto para comenzar.
                     </td>
                 </tr>`;
@@ -669,37 +667,44 @@ const UIManager = (function () {
         }
 
         ticket.forEach((item, index) => {
-            const subtotal = Helpers.aNumero(item.precio) * Helpers.aNumero(item.cantidad);
-            const fila = document.createElement("tr");
+            // cantidad puede ser decimal (ej: 0.557 kg de pan)
+            const cant     = Helpers.aDecimal(item.cantidad, 3, 0);
+            // precio unitario ya es entero (sin centavos)
+            const precio   = Helpers.redondear2(Helpers.aNumero(item.precio));
+            // subtotal = precio × cantidad, redondeado al peso más cercano
+            const subtotal = Helpers.redondear2(precio * cant);
 
+            const fila = document.createElement("tr");
             fila.innerHTML = `
-                <td><strong>${item.nombre}</strong><br><small class="u-text-muted">${item.codigo}</small></td>
-                <td>${Helpers.formatearMoneda(item.precio)}</td>
-                <td>
-                    <div style="display: flex; align-items: center; gap: var(--space-1); justify-content: center;">
-                        <button type="button" class="btn btn--ghost btn--sm" data-accion="restar" data-index="${index}" style="padding: 2px 6px;">-</button>
-                        <input type="number" 
-                            class="ticket-cantidad-input" 
-                            data-index="${index}" 
-                            value="${item.cantidad}" 
-                            min="1" 
-                            step="1" 
-                            style="width: 65px; text-align: center; padding: 2px 4px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-weight: bold;">
-                        <button type="button" class="btn btn--ghost btn--sm" data-accion="sumar" data-index="${index}" style="padding: 2px 6px;">+</button>
+                <td class="ticket-table__name">
+                    <strong>${Helpers.escaparHtml(item.nombre)}</strong>
+                    <br><small class="u-text-muted">${Helpers.escaparHtml(item.codigo)}</small>
+                </td>
+                <td class="ticket-table__qty">
+                    <div class="qty-stepper">
+                        <button type="button" class="qty-stepper__btn"
+                            data-accion="restar" data-index="${index}" aria-label="Restar">−</button>
+                        <input type="text"
+                            class="ticket-cantidad-input"
+                            data-index="${index}"
+                            value="${Helpers.formatearCantidad(cant)}"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            aria-label="Cantidad">
+                        <button type="button" class="qty-stepper__btn"
+                            data-accion="sumar" data-index="${index}" aria-label="Sumar">+</button>
                     </div>
                 </td>
-                <td class="u-text-right"><strong>${Helpers.formatearMoneda(subtotal)}</strong></td>
-                <td class="u-text-center">
-                    <button type="button" class="btn btn--ghost btn--danger btn--sm" data-accion="eliminar" data-index="${index}" title="Quitar ítem" style="padding: var(--space-1) var(--space-2);">
-                        🗑️
-                    </button>
-                </td>
-            `;
+                <td class="ticket-table__price">${Helpers.formatearMoneda(precio)}</td>
+                <td class="ticket-table__subtotal">${Helpers.formatearMoneda(subtotal)}</td>
+                <td class="ticket-table__remove">
+                    <button type="button" class="icon-btn"
+                        data-accion="eliminar" data-index="${index}" aria-label="Quitar ítem">🗑️</button>
+                </td>`;
             cuerpo.appendChild(fila);
         });
 
-        const total = POSCore.calcularTotalTicket();
-        actualizarTotalesTicket(total);
+        actualizarTotalesTicket(POSCore.calcularTotalTicket());
     }
 
     /**
@@ -825,11 +830,12 @@ const UIManager = (function () {
 
         const lineas = (venta.productos || [])
             .map((item) => {
-                const subtotal = item.precio * item.cantidad;
+                const cant     = Helpers.aDecimal(item.cantidad, 3, 0);
+                const subtotal = Helpers.redondear2(item.precio * cant);
                 return `
                     <div class="receipt__line-name">${Helpers.escaparHtml(item.nombre)}</div>
                     <div class="receipt__line-detail">
-                        <span>${item.cantidad} x ${Helpers.formatearMoneda(item.precio)}</span>
+                        <span>${Helpers.formatearCantidad(cant)} x ${Helpers.formatearMoneda(item.precio)}</span>
                         <span>${Helpers.formatearMoneda(subtotal)}</span>
                     </div>
                 `;
@@ -1408,7 +1414,7 @@ const UIManager = (function () {
             const itemsHtml = (venta.productos || [])
                 .map(
                     (item) =>
-                        `<div class="history-card__item"><span>${item.cantidad}x ${Helpers.escaparHtml(item.nombre)}</span><span>${Helpers.formatearMoneda(item.precio * item.cantidad)}</span></div>`
+                        `<div class="history-card__item"><span>${Helpers.formatearCantidad(item.cantidad)}x ${Helpers.escaparHtml(item.nombre)}</span><span>${Helpers.formatearMoneda(Helpers.redondear2(item.precio * Helpers.aDecimal(item.cantidad, 3, 0)))}</span></div>`
                 )
                 .join("");
 
@@ -1845,6 +1851,205 @@ const UIManager = (function () {
     }
 
     // ==============================================================
+    // COPIA TOTAL DE DATOS (backup/restauración entre dispositivos)
+    // ==============================================================
+
+    /** Versión del formato de la Copia Total (para futuras migraciones). */
+    const VERSION_COPIA_TOTAL = 1;
+
+    /** Inicializa los listeners del botón y modal de Copia Total. */
+    function initCopiaTotal() {
+        on("btnCopiaTotal", "click", () => {
+            const textarea = $("texto-copia-total");
+            if (textarea) textarea.value = "";
+            const resumen = $("resumenCopiaTotal");
+            if (resumen) resumen.innerHTML = "";
+            abrirModal("modalCopiaTotal");
+        });
+        on("btnCerrarCopiaTotal", "click", () => cerrarModal("modalCopiaTotal"));
+        on("btnGenerarCopiaTotal", "click", generarCopiaTotal);
+        on("btnCopiaTotalCombinar", "click", () => importarCopiaTotal("combinar"));
+        on("btnCopiaTotalReemplazar", "click", () => importarCopiaTotal("reemplazar"));
+    }
+
+    /**
+     * Agrupa los registros de cuentas corrientes (fiados) por nombre de
+     * cliente, con su saldo neto (deudas - pagos). Es información de
+     * referencia incluida en la Copia Total para lectura humana; la
+     * restauración siempre usa la lista plana `registrosFiados`, que es
+     * la fuente de verdad.
+     * @returns {object}
+     */
+    function agruparFiadosPorCliente() {
+        const porCliente = {};
+        registrosFiados.forEach((registro) => {
+            const nombre = registro.nombre && registro.nombre.trim() ? registro.nombre.trim() : "Sin nombre";
+            if (!porCliente[nombre]) porCliente[nombre] = { saldo: 0, movimientos: [] };
+            porCliente[nombre].movimientos.push(registro);
+            porCliente[nombre].saldo += registro.tipo === "PAGO" ? -registro.monto : registro.monto;
+        });
+        return porCliente;
+    }
+
+    /**
+     * Construye el objeto completo de respaldo: catálogo, rubros,
+     * historial de ventas, fiados (planos y agrupados por cliente) y
+     * pagos a proveedores.
+     * @returns {object}
+     */
+    function construirCopiaTotal() {
+        return {
+            app: "Sistema de Gestión Integrado",
+            version: VERSION_COPIA_TOTAL,
+            fechaGeneracion: new Date().toISOString(),
+            productos: productosDB,
+            rubros: rubrosDisponibles,
+            historialVentas,
+            registrosFiados,
+            registrosProveedores,
+            fiadosPorCliente: agruparFiadosPorCliente(),
+        };
+    }
+
+    /** Genera la Copia Total y la coloca en el portapapeles del dispositivo. */
+    function generarCopiaTotal() {
+        const backup = construirCopiaTotal();
+        const texto = JSON.stringify(backup, null, 2);
+
+        copiarAlPortapapeles(texto)
+            .then(() => {
+                const contenedor = $("resumenCopiaTotal");
+                if (contenedor) {
+                    const clientes = Object.keys(backup.fiadosPorCliente).length;
+                    contenedor.innerHTML = `
+                        <div class="import-summary__row"><span>📦 Productos</span><strong>${Object.keys(backup.productos).length}</strong></div>
+                        <div class="import-summary__row"><span>🧾 Ventas</span><strong>${backup.historialVentas.length}</strong></div>
+                        <div class="import-summary__row"><span>👥 Clientes con fiado</span><strong>${clientes}</strong></div>
+                        <div class="import-summary__row"><span>🚚 Registros de proveedores</span><strong>${backup.registrosProveedores.length}</strong></div>
+                    `;
+                }
+                mostrarToast("📋 Copia total copiada al portapapeles", "success");
+            })
+            .catch(() => mostrarToast("❌ No se pudo acceder al portapapeles del dispositivo", "error"));
+    }
+
+    /**
+     * Procesa el texto de una Copia Total pegado por el usuario y
+     * aplica la importación en el modo indicado, sanitizando cada
+     * registro para evitar errores de formato al restaurar.
+     * @param {"combinar"|"reemplazar"} modo
+     *   - "combinar": agrega/actualiza sobre los datos existentes.
+     *   - "reemplazar": descarta todos los datos actuales y los
+     *     sustituye por completo por los de la Copia Total.
+     */
+    function importarCopiaTotal(modo) {
+        const textarea = $("texto-copia-total");
+        if (!textarea || !textarea.value.trim()) {
+            mostrarToast("Pega una Copia Total generada previamente", "info");
+            return;
+        }
+
+        let datos;
+        try {
+            datos = JSON.parse(textarea.value);
+        } catch (error) {
+            mostrarToast("❌ El texto pegado no es una Copia Total válida (JSON inválido)", "error");
+            return;
+        }
+        if (!datos || typeof datos !== "object") {
+            mostrarToast("❌ El texto pegado no es una Copia Total válida", "error");
+            return;
+        }
+
+        const ejecutar = () => {
+            const productosImportados = {};
+            if (datos.productos && typeof datos.productos === "object") {
+                Object.keys(datos.productos).forEach((codigo) => {
+                    if (!codigo) return;
+                    productosImportados[String(codigo)] = StorageService.sanitizarProducto(datos.productos[codigo]);
+                });
+            }
+            const rubrosImportados = Array.isArray(datos.rubros) ? datos.rubros : [];
+            const ventasImportadas = Array.isArray(datos.historialVentas)
+                ? datos.historialVentas.map(StorageService.sanitizarVenta).filter(Boolean)
+                : [];
+            const fiadosImportados = Array.isArray(datos.registrosFiados)
+                ? datos.registrosFiados.map(StorageService.sanitizarFiado).filter(Boolean)
+                : [];
+            const proveedoresImportados = Array.isArray(datos.registrosProveedores)
+                ? datos.registrosProveedores.map(StorageService.sanitizarProveedor).filter(Boolean)
+                : [];
+
+            if (modo === "reemplazar") {
+                productosDB = productosImportados;
+                historialVentas = ventasImportadas;
+                registrosFiados = fiadosImportados;
+                registrosProveedores = proveedoresImportados;
+                StorageService.guardarRubros(rubrosImportados);
+            } else {
+                Object.keys(productosImportados).forEach((codigo) => {
+                    productosDB[codigo] = productosImportados[codigo];
+                });
+
+                const idsVentas = new Set(historialVentas.map((v) => v.id));
+                ventasImportadas.forEach((v) => {
+                    if (!idsVentas.has(v.id)) historialVentas.push(v);
+                });
+
+                const idsFiados = new Set(registrosFiados.map((f) => f.id));
+                fiadosImportados.forEach((f) => {
+                    if (!idsFiados.has(f.id)) registrosFiados.push(f);
+                });
+
+                const idsProveedores = new Set(registrosProveedores.map((p) => p.id));
+                proveedoresImportados.forEach((p) => {
+                    if (!idsProveedores.has(p.id)) registrosProveedores.push(p);
+                });
+
+                StorageService.guardarRubros([...rubrosDisponibles, ...rubrosImportados]);
+            }
+
+            rubrosDisponibles = StorageService.cargarRubros();
+
+            StorageService.guardarProductos(productosDB);
+            StorageService.guardarVentas(historialVentas);
+            StorageService.guardarFiados(registrosFiados);
+            StorageService.guardarProveedores(registrosProveedores);
+
+            actualizarSelectRubros();
+            renderListaProductos();
+            renderHistorial();
+            paginacion.fiados.pagina = 1;
+            renderFiados();
+            paginacion.proveedores.pagina = 1;
+            renderProveedores();
+            actualizarEfectivoCaja();
+            if (graficoVentas) renderEstadisticas();
+
+            textarea.value = "";
+            const contenedor = $("resumenCopiaTotal");
+            if (contenedor) contenedor.innerHTML = "";
+            cerrarModal("modalCopiaTotal");
+
+            const verbo = modo === "reemplazar" ? "Todos los datos fueron reemplazados" : "Datos combinados con lo existente";
+            mostrarToast(
+                `✅ ${verbo}: ${Object.keys(productosImportados).length} producto(s), ${ventasImportadas.length} venta(s), ${fiadosImportados.length} fiado(s)`,
+                "success"
+            );
+        };
+
+        if (modo === "reemplazar") {
+            confirmar(
+                "Esto borrará TODOS los datos actuales (catálogo, ventas, fiados y proveedores) y los reemplazará por los de la Copia Total pegada. Esta acción no se puede deshacer. ¿Continuar?",
+                ejecutar,
+                { titulo: "⚠️ Reemplazar todos los datos", textoAceptar: "Sí, reemplazar todo" }
+            );
+        } else {
+            ejecutar();
+        }
+    }
+
+    // ==============================================================
     // SOLAPA 6: PAGO A PROVEEDORES
     // ==============================================================
 
@@ -2043,6 +2248,7 @@ const UIManager = (function () {
         initEstadisticas();
         initFiados();
         initProveedores();
+        initCopiaTotal();
 
         // Rango por defecto de estadísticas: desde el primer día del mes hasta hoy.
         const hoy = new Date();
