@@ -1,4 +1,3 @@
-
 const StorageService = (function () {
     "use strict";
 
@@ -83,8 +82,8 @@ const StorageService = (function () {
             costo: Helpers.aNumero(p.costo, 0),
             porcentaje: Helpers.aNumero(p.porcentaje, 0),
             precioVenta: Helpers.aNumero(p.precioVenta, 0),
-            stock: Helpers.aEntero(p.stock, 0),
-            limiteStock: Helpers.aEntero(p.limiteStock, 3),
+            stock:       Helpers.aDecimal(p.stock,       3, 0),
+            limiteStock: Helpers.aDecimal(p.limiteStock, 3, 3),
         };
     }
 
@@ -132,7 +131,7 @@ const StorageService = (function () {
             rubro: typeof i.rubro === "string" ? i.rubro : "ALMACÉN",
             costo: Helpers.aNumero(i.costo, 0),
             precio: Helpers.aNumero(i.precio, 0),
-            cantidad: Helpers.aEntero(i.cantidad, 0),
+            cantidad: Helpers.aDecimal(i.cantidad, 3, 0),
         };
     }
 
